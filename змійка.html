@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гра Змійка</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            /* Запобігаємо прокручуванню при натисканні пробілу */
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 1.5rem;
+        }
+
+        canvas {
+            background-color: #000;
+            border: 3px solid #333;
+            border-radius: 8px;
+            max-width: 100%;
+            /* Адаптивність для менших екранів */
+            max-height: 70vh; 
+            aspect-ratio: 1 / 1;
+        }
+
+        .controls-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .controls-container h2 {
+            font-size: 1.2rem;
+            color: #555;
+            margin: 0;
+        }
+
+        .action-button {
+            font-size: 1.2rem; /* Змінено розмір шрифту */
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            height: 44px;
+            border-radius: 22px; /* Зроблено більш овальним */
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: auto; 
+            padding: 0 20px; /* Додано відступи */
+        }
+
+        .action-button:hover {
+            background-color: #0056b3;
+        }
+
+        .action-button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <h1>Змійка на JavaScript</h1>
+
+    <!-- Встановлюємо розмір канви, який добре ділиться на gridSize -->
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <div class="controls-container">
+        <button id="startPauseButton" class="action-button">Старт</button>
+    </div>
+
+    <!-- Контейнер для швидкості видалено, як ви просили -->
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const gridSize = 20; // Розмір однієї клітинки
+        let snake = [{ x: 10, y: 10 }];
+        let fruit = { x: 15, y: 15 };
+        let velocity = { x: 0, y: 0 };
+        let score = 0;
+        let highScore = 0;
+        let changingDirection = false;
+        let pauseGame = true;
+        let gameRunning = false;
+        const gameSpeed = 150; // Встановлено фіксовану швидкість (150мс)
+        let gameInterval;
+
+        const startPauseButton = document.getElementById('startPauseButton');
+        
+        // Кнопки швидкості видалено
+
+        // ========== КНОПКИ ==========
+        startPauseButton.addEventListener('click', () => {
+            if (!gameRunning) {
+                // Перший запуск гри
+                gameRunning = true;
+                pauseGame = false;
+                
+                // *** ВИПРАВЛЕННЯ: Надаємо початковий напрямок руху, якщо гра починається ***
+                if (velocity.x === 0 && velocity.y === 0) {
+                    velocity = { x: 1, y: 0 }; // Починаємо рух вправо
+                }
+                
+                startGameInterval();
+                startPauseButton.textContent = 'Пауза';
+            } else {
+                // Пауза або продовження
+                pauseGame = !pauseGame;
+                startPauseButton.textContent = pauseGame ? 'Продовжити' : 'Пауза';
+            }
+        });
+
+        // Слухачі для кнопок швидкості видалено
+
+        // ========== ОСНОВНИЙ ЦИКЛ ==========
+        function startGameInterval() {
+            if (gameInterval) clearInterval(gameInterval);
+            // Використовуємо фіксовану швидкість
+            gameInterval = setInterval(gameLoop, gameSpeed); 
+        }
+
+        function gameLoop() {
+            if (pauseGame) {
+                drawGame(); // Малюємо, але не рухаємо
+                return;
+            }
+
+            changingDirection = false; // Дозволяємо зміну напрямку
+            moveSnake();
+
+            if (isGameOver()) {
+                clearInterval(gameInterval);
+                gameRunning = false;
+                pauseGame = true;
+                startPauseButton.textContent = 'Старт';
+
+                if (score > highScore) {
+                    highScore = score;
+                    saveHighScore();
+                }
+
+                // Скидання гри
+                snake = [{ x: 10, y: 10 }];
+                velocity = { x: 0, y: 0 }; // Скидаємо швидкість, щоб чекати на "Старт"
+                score = 0;
+                placeFruit();
+                drawGame(); // Малюємо фінальний стан
+                return;
+            }
+
+            if (didEatFruit()) {
+                score++;
+                placeFruit();
+                // Не викликаємо snake.pop(), змійка росте
+            } else {
+                snake.pop(); // Видаляємо хвіст, якщо фрукт не з'їли
+            }
+
+            drawGame(); // Малюємо оновлений стан гри
+        }
+
+        // ========== РУХ ==========
+        function moveSnake() {
+            const head = {
+                x: snake[0].x + velocity.x,
+                y: snake[0].y + velocity.y
+            };
+            snake.unshift(head); // Додаємо нову голову
+        }
+
+        // ========== ЇЖА ==========
+        function didEatFruit() {
+            return snake[0].x === fruit.x && snake[0].y === fruit.y;
+        }
+
+        function placeFruit() {
+            // Розміщуємо фрукт у вільній клітинці
+            let fruitPlaced = false;
+            while (!fruitPlaced) {
+                fruit.x = Math.floor(Math.random() * (canvas.width / gridSize));
+                fruit.y = Math.floor(Math.random() * (canvas.height / gridSize));
+                
+                // Перевіряємо, чи не з'явився фрукт на змійці
+                fruitPlaced = true;
+                for (let part of snake) {
+                    if (part.x === fruit.x && part.y === fruit.y) {
+                        fruitPlaced = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ========== СТІНИ/КІНЕЦЬ ГРИ ==========
+        function isGameOver() {
+            const head = snake[0];
+            
+            // 1. Зіткнення зі стіною
+            if (head.x < 0 || head.x >= (canvas.width / gridSize) || head.y < 0 || head.y >= (canvas.height / gridSize)) {
+                return true;
+            }
+
+            // 2. Зіткнення з власним хвостом
+            for (let i = 1; i < snake.length; i++) {
+                if (snake[i].x === head.x && snake[i].y === head.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ========== МАЛЮВАННЯ ==========
+        function drawGame() {
+            // Очищуємо канвас
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Малюємо змійку
+            ctx.fillStyle = 'lime';
+            for (let part of snake) {
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
+            }
+
+            // Малюємо фрукт
+            ctx.fillStyle = 'red';
+            ctx.fillRect(fruit.x * gridSize, fruit.y * gridSize, gridSize - 1, gridSize - 1);
+
+            // Малюємо рахунок
+            ctx.fillStyle = 'white';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Рахунок: ' + score, 10, 25);
+            ctx.textAlign = 'right';
+            ctx.fillText('Рекорд: ' + highScore, canvas.width - 10, 25);
+            
+            ctx.textAlign = 'center'; // Скидаємо вирівнювання
+
+            // Повідомлення про паузу
+            if (pauseGame && gameRunning) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.font = 'bold 40px Arial';
+                ctx.fillText('ПАУЗА', canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        // ========== КЕРУВАННЯ ==========
+        document.addEventListener('keydown', changeDirection);
+        function changeDirection(event) {
+            const keyPressed = event.key;
+
+            // Керування паузою через пробіл
+            if (keyPressed === ' ' && gameRunning) {
+                event.preventDefault(); // Запобігаємо прокручуванню сторінки
+                pauseGame = !pauseGame;
+                startPauseButton.textContent = pauseGame ? 'Продовжити' : 'Пауза';
+                return;
+            }
+
+            // Ігноруємо клавіші, якщо гра на паузі, не запущена або вже змінюємо напрямок
+            if (changingDirection || pauseGame || !gameRunning) return;
+
+            const goingUp = velocity.y === -1;
+            const goingDown = velocity.y === 1;
+            const goingRight = velocity.x === 1;
+            const goingLeft = velocity.x === -1;
+
+            switch (keyPressed) {
+                case 'ArrowUp':
+                case 'w': // Додамо керування WASD
+                    if (!goingDown) velocity = { x: 0, y: -1 };
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    if (!goingUp) velocity = { x: 0, y: 1 };
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    if (!goingRight) velocity = { x: -1, y: 0 };
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    if (!goingLeft) velocity = { x: 1, y: 0 };
+                    break;
+            }
+            changingDirection = true; // Запобігаємо зміні напрямку двічі за один кадр
+        }
+
+        // ========== ЗБЕРЕЖЕННЯ РЕКОРДУ ==========
+        function saveHighScore() {
+            try {
+                localStorage.setItem('snakeHighScore', highScore);
+            } catch (e) {
+                console.error("Не вдалося зберегти рекорд:", e);
+            }
+        }
+
+        function loadHighScore() {
+            try {
+                const saved = localStorage.getItem('snakeHighScore');
+                if (saved) {
+                    highScore = parseInt(saved);
+                }
+            } catch (e) {
+                console.error("Не вдалося завантажити рекорд:", e);
+            }
+        }
+
+        // ========== СТАРТ ==========
+        loadHighScore();
+        placeFruit();
+        drawGame(); // Початкове відмальовування гри
+    </script>
+</body>
+</html>
