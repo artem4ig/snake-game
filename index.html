@@ -20,7 +20,59 @@
         h1 {
             color: #333;
             font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 15px;
         }
+
+        /* --- НОВИЙ КОНТЕЙНЕР ДЛЯ ГРИ --- */
+        .game-wrapper {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start; /* Вирівнюємо по верху */
+            gap: 20px;
+        }
+        
+        /* --- НОВІ СТИЛІ ДЛЯ ЛЕГЕНДИ --- */
+        .legend-container {
+            background-color: #1a1a1a;
+            border: 3px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            width: 200px;
+            color: #f0f0f0;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .legend-container h3 {
+            margin: 0 0 15px 0;
+            color: #00FFFF; /* Неоновий заголовок */
+            text-align: center;
+            font-size: 1.3rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+        }
+
+        .legend-color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #555;
+            flex-shrink: 0; /* Заборона зменшення */
+        }
+        
+        /* Кольори з гри */
+        .color-snake { background-color: #DC143C; }
+        .color-fruit { background-color: #00FFFF; }
+        .color-obstacle { background-color: #8A2BE2; }
+        .color-slow { background-color: #3498db; }
+        .color-ghost { background-color: #ecf0f1; }
+        /* ---------------------------------- */
+
 
         canvas {
             background-color: #000;
@@ -30,6 +82,7 @@
             /* Адаптивність для менших екранів */
             max-height: 70vh; 
             aspect-ratio: 1 / 1;
+            flex-shrink: 0; /* Заборона зменшення канви */
         }
 
         .controls-container {
@@ -70,13 +123,64 @@
         .action-button:active {
             transform: scale(0.95);
         }
+
+        /* --- АДАПТИВНІСТЬ --- */
+        @media (max-width: 700px) {
+            body {
+                height: auto;
+                overflow: auto; /* Дозволити скрол на малих екранах */
+            }
+            .game-wrapper {
+                flex-direction: column-reverse; /* Легенда буде під грою */
+                align-items: center;
+            }
+            .legend-container {
+                width: 90%;
+                max-width: 400px; /* Ширина як у канви */
+            }
+            canvas {
+                max-height: 80vw; /* Зробити канву трохи меншою */
+            }
+            h1 {
+                margin-top: 10px;
+            }
+        }
+
     </style>
 </head>
 <body>
-    <h1>Змійка на JavaScript</h1>
+    <h1>ЗМІЙКА: DOOM ЕДИЦІЯ</h1>
 
-    <!-- Встановлюємо розмір канви, який добре ділиться на gridSize -->
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div class="game-wrapper">
+        <!-- НОВА ЛЕГЕНДА -->
+        <div class="legend-container">
+            <h3>ЛЕГЕНДА</h3>
+            <div class="legend-item">
+                <div class="legend-color-box color-snake"></div>
+                <span>Змійка (Це ви)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color-box color-fruit"></div>
+                <span>Фрукт (+1 Рахунок)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color-box color-obstacle"></div>
+                <span>Перешкода (Смерть)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color-box color-slow"></div>
+                <span>Уповільнення (6с)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color-box color-ghost"></div>
+                <span>Привид (8с)</span>
+            </div>
+        </div>
+        <!-- ---------------- -->
+
+        <!-- Встановлюємо розмір канви, який добре ділиться на gridSize -->
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+    </div>
 
     <div class="controls-container">
         <button id="startPauseButton" class="action-button">Старт</button>
@@ -97,13 +201,26 @@
         let changingDirection = false;
         let pauseGame = true;
         let gameRunning = false;
-        const gameSpeed = 150; // Встановлено фіксовану швидкість (150мс)
+        
+        let baseGameSpeed = 100; // Базова швидкість гри
+        let gameSpeed = 100; // Поточна (ефективна) швидкість гри
         let gameInterval;
+
+        // --- ІВЕНТИ ---
+        let currentLevel = 0; 
+        let obstacles = []; 
+        let eventMessage = ""; 
+        let eventMessageTimer = 0; 
+
+        // --- НОВЕ: ЗІЛЛЯ (ПОТІОНИ) ---
+        let potion = null; // { x, y, type: 'slow' | 'ghost' }
+        let potionSpawnTimer = 10000; // Час до появи першого зілля (10 сек)
+        let activeBuff = { type: 'none', timer: 0 }; // { type, timer }
+
+        // ---------------------------------
 
         const startPauseButton = document.getElementById('startPauseButton');
         
-        // Кнопки швидкості видалено
-
         // ========== КНОПКИ ==========
         startPauseButton.addEventListener('click', () => {
             if (!gameRunning) {
@@ -111,9 +228,8 @@
                 gameRunning = true;
                 pauseGame = false;
                 
-                // *** ВИПРАВЛЕННЯ: Надаємо початковий напрямок руху, якщо гра починається ***
                 if (velocity.x === 0 && velocity.y === 0) {
-                    velocity = { x: 1, y: 0 }; // Починаємо рух вправо
+                    velocity = { x: 1, y: 0 }; 
                 }
                 
                 startGameInterval();
@@ -125,25 +241,39 @@
             }
         });
 
-        // Слухачі для кнопок швидкості видалено
-
         // ========== ОСНОВНИЙ ЦИКЛ ==========
         function startGameInterval() {
             if (gameInterval) clearInterval(gameInterval);
-            // Використовуємо фіксовану швидкість
+            // Встановлюємо інтервал на основі поточної швидкості
             gameInterval = setInterval(gameLoop, gameSpeed); 
         }
 
         function gameLoop() {
             if (pauseGame) {
-                drawGame(); // Малюємо, але не рухаємо
+                drawGame(); 
                 return;
             }
 
-            changingDirection = false; // Дозволяємо зміну напрямку
-            moveSnake();
+            // --- ОНОВЛЕННЯ ТАЙМЕРІВ ---
+            if (eventMessageTimer > 0) eventMessageTimer -= gameSpeed;
+            if (potionSpawnTimer > 0) potionSpawnTimer -= gameSpeed;
+            if (activeBuff.timer > 0) activeBuff.timer -= gameSpeed;
 
-            if (isGameOver()) {
+            // Перевірка, чи закінчився бафф
+            if (activeBuff.timer <= 0 && activeBuff.type !== 'none') {
+                deactivateBuff();
+            }
+
+            // Перевірка, чи час спавнити зілля
+            if (potion === null && potionSpawnTimer <= 0) {
+                placePotion();
+            }
+            // -------------------------
+
+            changingDirection = false; 
+            moveSnake(); 
+
+            if (isGameOver()) { 
                 clearInterval(gameInterval);
                 gameRunning = false;
                 pauseGame = true;
@@ -154,91 +284,268 @@
                     saveHighScore();
                 }
 
-                // Скидання гри
+                // --- СКИДАННЯ ГРИ ---
                 snake = [{ x: 10, y: 10 }];
-                velocity = { x: 0, y: 0 }; // Скидаємо швидкість, щоб чекати на "Старт"
+                velocity = { x: 0, y: 0 }; 
                 score = 0;
+                
+                baseGameSpeed = 100; 
+                gameSpeed = 100;
+                currentLevel = 0;
+                obstacles = []; 
+                potion = null;
+                potionSpawnTimer = 10000; // Скинути таймер зілля
+                activeBuff = { type: 'none', timer: 0 };
+                // -------------------------
+
                 placeFruit();
-                drawGame(); // Малюємо фінальний стан
+                drawGame(); 
                 return;
             }
 
+            // Перевірка зілля (ПЕРЕД фруктами, щоб зілля мало пріоритет)
+            if (didEatPotion()) {
+                activateBuff(potion.type);
+                potion = null; // Зілля з'їли
+                potionSpawnTimer = 15000; // Нове через 15 сек
+            }
+
+            // Перевірка фруктів
             if (didEatFruit()) {
                 score++;
                 placeFruit();
-                // Не викликаємо snake.pop(), змійка росте
+                checkGameEvents(); 
             } else {
-                snake.pop(); // Видаляємо хвіст, якщо фрукт не з'їли
+                snake.pop(); 
             }
 
-            drawGame(); // Малюємо оновлений стан гри
+            drawGame(); 
         }
 
         // ========== РУХ ==========
         function moveSnake() {
-            const head = {
-                x: snake[0].x + velocity.x,
-                y: snake[0].y + velocity.y
-            };
-            snake.unshift(head); // Додаємо нову голову
+            let newX = snake[0].x + velocity.x;
+            let newY = snake[0].y + velocity.y;
+            const gridWidth = canvas.width / gridSize;
+            const gridHeight = canvas.height / gridSize;
+
+            if (newX < 0) newX = gridWidth - 1;
+            else if (newX >= gridWidth) newX = 0;
+            if (newY < 0) newY = gridHeight - 1;
+            else if (newY >= gridHeight) newY = 0;
+
+            const head = { x: newX, y: newY };
+            snake.unshift(head); 
         }
 
-        // ========== ЇЖА ==========
+        // ========== ЇЖА ТА ЗІЛЛЯ ==========
         function didEatFruit() {
             return snake[0].x === fruit.x && snake[0].y === fruit.y;
         }
 
+        function didEatPotion() {
+            return potion && snake[0].x === potion.x && snake[0].y === potion.y;
+        }
+
+        // Універсальна перевірка вільного місця
+        function isCellFree(x, y) {
+            // Перевірка на змійці
+            for (let part of snake) {
+                if (part.x === x && part.y === y) return false;
+            }
+            // Перевірка на перешкоді
+            for (let ob of obstacles) {
+                if (ob.x === x && ob.y === y) return false;
+            }
+            // Перевірка на фрукті
+            if (fruit.x === x && fruit.y === y) return false;
+            // Перевірка на іншому зіллі (якщо є)
+            if (potion && potion.x === x && potion.y === y) return false;
+            
+            return true;
+        }
+
         function placeFruit() {
-            // Розміщуємо фрукт у вільній клітинці
-            let fruitPlaced = false;
-            while (!fruitPlaced) {
-                fruit.x = Math.floor(Math.random() * (canvas.width / gridSize));
-                fruit.y = Math.floor(Math.random() * (canvas.height / gridSize));
+            let placed = false;
+            while (!placed) {
+                let testX = Math.floor(Math.random() * (canvas.width / gridSize));
+                let testY = Math.floor(Math.random() * (canvas.height / gridSize));
+                if (isCellFree(testX, testY)) {
+                    fruit.x = testX;
+                    fruit.y = testY;
+                    placed = true;
+                }
+            }
+        }
+
+        function placePotion() {
+            // 50% шанс на появу, щоб вони не з'являлись гарантовано
+            if (Math.random() < 0.5) {
+                potionSpawnTimer = 10000; // Спробувати знову через 10 сек
+                return;
+            }
+
+            let placed = false;
+            while (!placed) {
+                let testX = Math.floor(Math.random() * (canvas.width / gridSize));
+                let testY = Math.floor(Math.random() * (canvas.height / gridSize));
                 
-                // Перевіряємо, чи не з'явився фрукт на змійці
-                fruitPlaced = true;
-                for (let part of snake) {
-                    if (part.x === fruit.x && part.y === fruit.y) {
-                        fruitPlaced = false;
-                        break;
+                // Не спавнити біля голови
+                let nearHead = (Math.abs(testX - snake[0].x) <= 3 && Math.abs(testY - snake[0].y) <= 3);
+                
+                if (isCellFree(testX, testY) && !nearHead) {
+                    // Випадковий тип зілля
+                    let type = (Math.random() < 0.5) ? 'slow' : 'ghost';
+                    potion = { x: testX, y: testY, type: type };
+                    placed = true;
+                }
+            }
+            // Скидаємо таймер до наступної *спроби*
+            potionSpawnTimer = 15000; // 15 сек
+        }
+
+        // --- НОВІ ФУНКЦІЇ ДЛЯ БАФФІВ ---
+
+        function activateBuff(type) {
+            if (type === 'slow') {
+                activeBuff.type = 'slow';
+                activeBuff.timer = 6000; // 6 секунд
+                gameSpeed = baseGameSpeed + 50; // Уповільнення (інтервал більший)
+                startGameInterval(); // Застосувати нову швидкість
+                showEventMessage("SLOW-MO (6s)!");
+            } else if (type === 'ghost') {
+                activeBuff.type = 'ghost';
+                activeBuff.timer = 8000; // 8 секунд
+                showEventMessage("GHOST (8s)!");
+            }
+        }
+
+        function deactivateBuff() {
+            let type = activeBuff.type;
+            activeBuff.type = 'none';
+            activeBuff.timer = 0;
+
+            if (type === 'slow') {
+                gameSpeed = baseGameSpeed; // Повернути базову швидкість
+                startGameInterval(); // Застосувати
+                showEventMessage("Speed normal");
+            } else if (type === 'ghost') {
+                showEventMessage("Ghost Faded");
+            }
+        }
+        // ---------------------------------
+
+
+        // --- ФУНКЦІЇ ІВЕНТІВ ---
+        function generateObstacles(count) {
+            for (let i = 0; i < count; i++) {
+                let placed = false;
+                while (!placed) {
+                    let obX = Math.floor(Math.random() * (canvas.width / gridSize));
+                    let obY = Math.floor(Math.random() * (canvas.height / gridSize));
+                    let nearHead = (Math.abs(obX - snake[0].x) <= 2 && Math.abs(obY - snake[0].y) <= 2);
+
+                    if (isCellFree(obX, obY) && !nearHead) {
+                        obstacles.push({ x: obX, y: obY });
+                        placed = true;
                     }
                 }
             }
         }
 
-        // ========== СТІНИ/КІНЕЦЬ ГРИ ==========
-        function isGameOver() {
-            const head = snake[0];
-            
-            // 1. Зіткнення зі стіною
-            if (head.x < 0 || head.x >= (canvas.width / gridSize) || head.y < 0 || head.y >= (canvas.height / gridSize)) {
-                return true;
+        function showEventMessage(msg) {
+            eventMessage = msg;
+            eventMessageTimer = 2000; // Показати на 2 секунди
+        }
+
+        function checkGameEvents() {
+            let speedChanged = false;
+            if (score >= 50 && currentLevel === 2) {
+                baseGameSpeed = 60; 
+                currentLevel = 3;
+                generateObstacles(5);
+                showEventMessage("MAXIMUM DOOM!");
+                speedChanged = true;
+            } else if (score >= 25 && currentLevel === 1) {
+                currentLevel = 2;
+                generateObstacles(5); 
+                showEventMessage("OBSTACLES!");
+            } else if (score >= 10 && currentLevel === 0) {
+                baseGameSpeed = 80;
+                currentLevel = 1;
+                showEventMessage("SPEED UP!");
+                speedChanged = true;
             }
 
-            // 2. Зіткнення з власним хвостом
+            // Застосувати нову швидкість, ТІЛЬКИ ЯКЩО не під дією "slow-mo"
+            if (speedChanged && activeBuff.type !== 'slow') {
+                gameSpeed = baseGameSpeed;
+                startGameInterval();
+            }
+        }
+        // ---------------------------------
+
+
+        // ========== КІНЕЦЬ ГРИ ==========
+        function isGameOver() {
+            const head = snake[0];
+
+            // Якщо ми привид, ігноруємо зіткнення
+            if (activeBuff.type === 'ghost') {
+                return false;
+            }
+
+            // 1. Зіткнення з власним хвостом
             for (let i = 1; i < snake.length; i++) {
                 if (snake[i].x === head.x && snake[i].y === head.y) {
                     return true;
                 }
             }
+
+            // 2. Зіткнення з перешкодою
+            for (let ob of obstacles) {
+                if (ob.x === head.x && ob.y === head.y) {
+                    return true;
+                }
+            }
+
             return false;
         }
 
         // ========== МАЛЮВАННЯ ==========
         function drawGame() {
-            // Очищуємо канвас
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Малюємо змійку
-            ctx.fillStyle = 'lime';
+            if (activeBuff.type === 'ghost') {
+                ctx.fillStyle = 'rgba(220, 20, 60, 0.5)'; // Напівпрозорий червоний
+            } else {
+                ctx.fillStyle = '#DC143C'; // "Пекельний" червоний
+            }
             for (let part of snake) {
                 ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
             }
 
             // Малюємо фрукт
-            ctx.fillStyle = 'red';
+            ctx.fillStyle = '#00FFFF'; // Неоновий блакитний
             ctx.fillRect(fruit.x * gridSize, fruit.y * gridSize, gridSize - 1, gridSize - 1);
+
+            // Малюємо зілля (НОВЕ)
+            if (potion) {
+                if (potion.type === 'slow') {
+                    ctx.fillStyle = '#3498db'; // Синій для slow-mo
+                } else if (potion.type === 'ghost') {
+                    ctx.fillStyle = '#ecf0f1'; // Білий для привида
+                }
+                ctx.fillRect(potion.x * gridSize, potion.y * gridSize, gridSize - 1, gridSize - 1);
+            }
+
+            // Малюємо перешкоди
+            ctx.fillStyle = '#8A2BE2'; // Фіолетовий
+            for (let ob of obstacles) {
+                ctx.fillRect(ob.x * gridSize, ob.y * gridSize, gridSize - 1, gridSize - 1);
+            }
 
             // Малюємо рахунок
             ctx.fillStyle = 'white';
@@ -248,6 +555,21 @@
             ctx.textAlign = 'right';
             ctx.fillText('Рекорд: ' + highScore, canvas.width - 10, 25);
             
+            // Малюємо таймер баффа (НОВЕ)
+            if (activeBuff.timer > 0) {
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 20px Arial';
+                let timerText = (activeBuff.timer / 1000).toFixed(1) + "s";
+                
+                if (activeBuff.type === 'ghost') {
+                    ctx.fillStyle = '#ecf0f1'; // Білий
+                    ctx.fillText('GHOST: ' + timerText, canvas.width / 2, 25);
+                } else if (activeBuff.type === 'slow') {
+                    ctx.fillStyle = '#3498db'; // Синій
+                    ctx.fillText('SLOW: ' + timerText, canvas.width / 2, 25);
+                }
+            }
+
             ctx.textAlign = 'center'; // Скидаємо вирівнювання
 
             // Повідомлення про паузу
@@ -256,6 +578,14 @@
                 ctx.font = 'bold 40px Arial';
                 ctx.fillText('ПАУЗА', canvas.width / 2, canvas.height / 2);
             }
+
+            // Малюємо повідомлення про подію
+            if (eventMessageTimer > 0) {
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.9)'; // Яскраво-жовтий
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(eventMessage, canvas.width / 2, canvas.height / 2 - 40);
+            }
         }
 
         // ========== КЕРУВАННЯ ==========
@@ -263,15 +593,13 @@
         function changeDirection(event) {
             const keyPressed = event.key;
 
-            // Керування паузою через пробіл
             if (keyPressed === ' ' && gameRunning) {
-                event.preventDefault(); // Запобігаємо прокручуванню сторінки
+                event.preventDefault(); 
                 pauseGame = !pauseGame;
                 startPauseButton.textContent = pauseGame ? 'Продовжити' : 'Пауза';
                 return;
             }
 
-            // Ігноруємо клавіші, якщо гра на паузі, не запущена або вже змінюємо напрямок
             if (changingDirection || pauseGame || !gameRunning) return;
 
             const goingUp = velocity.y === -1;
@@ -279,25 +607,25 @@
             const goingRight = velocity.x === 1;
             const goingLeft = velocity.x === -1;
 
-            switch (keyPressed) {
-                case 'ArrowUp':
-                case 'w': // Додамо керування WASD
+            switch (keyPressed.toLowerCase()) {
+                case 'arrowup':
+                case 'w':
                     if (!goingDown) velocity = { x: 0, y: -1 };
                     break;
-                case 'ArrowDown':
+                case 'arrowdown':
                 case 's':
                     if (!goingUp) velocity = { x: 0, y: 1 };
                     break;
-                case 'ArrowLeft':
+                case 'arrowleft':
                 case 'a':
                     if (!goingRight) velocity = { x: -1, y: 0 };
                     break;
-                case 'ArrowRight':
+                case 'arrowright':
                 case 'd':
                     if (!goingLeft) velocity = { x: 1, y: 0 };
                     break;
             }
-            changingDirection = true; // Запобігаємо зміні напрямку двічі за один кадр
+            changingDirection = true; 
         }
 
         // ========== ЗБЕРЕЖЕННЯ РЕКОРДУ ==========
@@ -323,7 +651,7 @@
         // ========== СТАРТ ==========
         loadHighScore();
         placeFruit();
-        drawGame(); // Початкове відмальовування гри
+        drawGame(); 
     </script>
 </body>
 </html>
